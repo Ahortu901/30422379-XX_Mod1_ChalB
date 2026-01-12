@@ -2,7 +2,8 @@
 import { fetchJson } from "./fetchJson";
 
 // Always via proxy to avoid CORS (vite proxy + Netlify redirect)
-const LIST_URL = "/ea/doc/bathing-water.json";
+const LIST_URL = "https://environment.data.gov.uk/doc/bathing-water.json";
+
 
 function pickItems(data) {
   return (
