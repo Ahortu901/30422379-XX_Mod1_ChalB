@@ -1,4 +1,3 @@
-// src/features/water/WaterTab.jsx  (FULL - friendly list + clean labels)
 import { useMemo, useState } from "react";
 import {
   Box,
@@ -15,55 +14,35 @@ import {
 } from "@mui/material";
 import WaterIcon from "@mui/icons-material/Water";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import PlaceIcon from "@mui/icons-material/Place";
 
 import { useQuery } from "@tanstack/react-query";
 import { listBathingWaters, getBathingWaterDetail } from "../../api/bathingWaterApi";
 import { haversineKm } from "../../utils/geo";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "../../components/StatusBlock";
 
-/**
- * Friendly rendering helpers for EA linked-data values.
- * EA often returns objects like: { _value: "...", _lang: "en" }
- */
-function toText(v) {
-  if (v == null) return "";
-
-  if (Array.isArray(v)) return v.map(toText).filter(Boolean).join(", ");
-
-  if (typeof v === "object") {
-    if ("_value" in v) return String(v._value);
-    if ("@value" in v) return String(v["@value"]);
-    if ("value" in v) return String(v.value);
-
-    // Some LD objects: { name: { _value: "Northumberland" }, _about: "..." }
-    if ("name" in v) return toText(v.name);
-
-    // Some: { label: "X" }
-    if ("label" in v && typeof v.label === "string") return v.label;
-
-    // Do NOT stringify objects in the UI list (too noisy)
-    return "";
-  }
-
-  return String(v);
-}
-
 function pickLabel(x) {
-  const raw =
+  return (
     x?.label ||
     x?.name ||
     x?.title ||
     x?.["rdfs:label"] ||
     x?.["dc:title"] ||
     x?.["dct:title"] ||
-    "Bathing water";
-  const t = toText(raw);
-  return t || "Bathing water";
+    "Bathing water"
+  );
 }
 
 function getAboutUrl(x) {
-  return x?._about || x?.about || x?.["@id"] || x?.id || x?.uri || x?.url || null;
+  // be VERY tolerant: the EA LD endpoints vary a lot
+  return (
+    x?._about ||
+    x?.about ||
+    x?.["@id"] ||
+    x?.id ||
+    x?.uri ||
+    x?.url ||
+    null
+  );
 }
 
 function asNumber(v) {
@@ -94,33 +73,31 @@ function extractLatLngFromItem(item) {
   return null;
 }
 
-// Try to extract a nice authority/region name from the list item
-function extractAuthority(item) {
-  // common keys we’ve seen
-  const raw =
+function extractMetaFromListItem(item) {
+  const about = getAboutUrl(item);
+  const label = pickLabel(item);
+
+  const district =
     item?.localAuthorityName ||
     item?.district ||
     item?.region ||
     item?.["ea:localAuthorityName"] ||
-    item?.localAuthority ||
     null;
 
-  // some shapes: { localAuthority: { name: { _value: "Northumberland" } } }
-  const nested = item?.localAuthority?.name || item?.district?.name || item?.region?.name;
-
-  return toText(raw) || toText(nested) || "";
-}
-
-function extractMetaFromListItem(item) {
-  const about = getAboutUrl(item);
-  const label = pickLabel(item);
-  const authority = extractAuthority(item);
   const ll = extractLatLngFromItem(item);
 
-  return { about, label, authority, latLng: ll, raw: item };
+  return { about, label, district, latLng: ll, raw: item };
+}
+
+function prettyValue(v) {
+  if (v == null) return "—";
+  if (Array.isArray(v)) return v.length ? v.join(", ") : "—";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
 }
 
 function extractDetailSummary(detailJson) {
+  // Handle common EA response shapes without assuming too much
   const items = detailJson?.items ?? detailJson?.result?.items;
   const root = Array.isArray(items) ? items[0] : (detailJson?.result ?? detailJson);
 
@@ -129,30 +106,28 @@ function extractDetailSummary(detailJson) {
   const latLng = extractLatLngFromItem(root);
 
   const authority =
-    toText(root?.localAuthorityName) ||
-    toText(root?.localAuthority?.name) ||
-    toText(root?.district) ||
-    toText(root?.district?.name) ||
-    "";
+    root?.localAuthorityName ||
+    root?.localAuthority ||
+    root?.district ||
+    root?.adminDistrict ||
+    null;
 
   const classification =
-    toText(root?.latestClassification) ||
-    toText(root?.classification) ||
-    toText(root?.overallClassification) ||
-    "";
+    root?.latestClassification ||
+    root?.classification ||
+    root?.overallClassification ||
+    null;
 
-  const waterType =
-    toText(root?.waterType) ||
-    toText(root?.bathingWaterType) ||
-    toText(root?.type) ||
-    "";
+  const extra = {
+    "Local authority": authority,
+    "Classification": classification,
+    "Latitude": latLng?.lat,
+    "Longitude": latLng?.lng,
+  };
 
-  const extra = [
-    authority ? { k: "Local authority", v: authority } : null,
-    waterType ? { k: "Water type", v: waterType } : null,
-    classification ? { k: "Classification", v: classification } : null,
-    latLng ? { k: "Coordinates", v: `${latLng.lat.toFixed(4)}, ${latLng.lng.toFixed(4)}` } : null,
-  ].filter(Boolean);
+  Object.keys(extra).forEach((k) => {
+    if (extra[k] == null) delete extra[k];
+  });
 
   return { label, about, extra, root };
 }
@@ -166,16 +141,17 @@ export default function WaterTab({ location }) {
     queryFn: listBathingWaters,
   });
 
+  // Always safe mapping
   const listItems = useMemo(() => {
     const arr = Array.isArray(listQuery.data) ? listQuery.data : [];
     return arr.map(extractMetaFromListItem);
   }, [listQuery.data]);
 
-  const results = useMemo(() => {
+  const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
+    const base = listItems;
 
-    // add distance (if possible)
-    const withDist = listItems
+    const withDist = base
       .map((x) => {
         const ll = x.latLng;
         const km = ll ? haversineKm(location.lat, location.lng, ll.lat, ll.lng) : null;
@@ -183,11 +159,11 @@ export default function WaterTab({ location }) {
       })
       .sort((a, b) => (a.km ?? 999999) - (b.km ?? 999999));
 
-    const filtered = q
-      ? withDist.filter((x) => x.label.toLowerCase().includes(q) || x.authority.toLowerCase().includes(q))
+    const qFiltered = q
+      ? withDist.filter((x) => (x.label || "").toLowerCase().includes(q))
       : withDist;
 
-    return filtered.slice(0, 30);
+    return qFiltered.slice(0, 30);
   }, [filter, listItems, location.lat, location.lng]);
 
   const detailQuery = useQuery({
@@ -207,7 +183,7 @@ export default function WaterTab({ location }) {
         <CardHeader
           avatar={<WaterIcon />}
           title="Water Quality (Bathing Water)"
-          subheader="Find bathing waters by name or authority; view friendly details."
+          subheader="Environment Agency bathing-water API: list and detail (robust rendering)."
         />
         <Divider />
         <CardContent>
@@ -215,29 +191,31 @@ export default function WaterTab({ location }) {
           {listQuery.isError && <ErrorBlock error={listQuery.error} />}
 
           {listQuery.isSuccess && listItems.length === 0 && (
-            <EmptyBlock title="No bathing waters returned" body="Check /ea/doc/bathing-water.json loads." />
+            <EmptyBlock
+              title="No bathing waters returned"
+              body="Either the API returned an empty list, or the response shape changed. Check /ea/doc/bathing-water.json loads."
+            />
           )}
 
           {listQuery.isSuccess && listItems.length > 0 && (
             <Grid container spacing={2}>
-              {/* LEFT: list */}
               <Grid item xs={12} md={6}>
                 <Stack spacing={1} sx={{ mb: 1 }}>
                   <Typography variant="subtitle2">Find a bathing water</Typography>
                   <TextField
                     size="small"
-                    label="Search by name or authority"
+                    label="Filter by name"
                     value={filter}
                     onChange={(e) => setFilter(e.target.value)}
-                    placeholder="e.g. Bamburgh, Northumberland..."
+                    placeholder="e.g. Brighton, Blackpool..."
                   />
                   <Typography variant="caption" color="text.secondary">
-                    Showing up to 30 results (closest first when coordinates are available).
+                    Showing up to 30 results (closest first when coordinates exist).
                   </Typography>
                 </Stack>
 
                 <Stack spacing={1}>
-                  {results.map((x) => (
+                  {filtered.map((x) => (
                     <Box
                       key={x.about || x.label}
                       onClick={() => x.about && setSelected(x)}
@@ -247,27 +225,24 @@ export default function WaterTab({ location }) {
                         borderColor: selected?.about === x.about ? "primary.main" : "divider",
                         borderRadius: 2,
                         cursor: x.about ? "pointer" : "not-allowed",
-                        opacity: x.about ? 1 : 0.6,
+                        opacity: x.about ? 1 : 0.55,
                         "&:hover": { bgcolor: x.about ? "action.hover" : "transparent" },
                       }}
                     >
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, flexGrow: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800, flexGrow: 1 }}>
                           {x.label}
                         </Typography>
                         {x.km != null && <Chip size="small" label={`${x.km.toFixed(1)} km`} />}
                       </Stack>
 
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <PlaceIcon fontSize="small" />
-                        <Typography variant="body2" color="text.secondary">
-                          {x.authority || "Authority not listed"}
-                        </Typography>
-                      </Stack>
+                      <Typography variant="body2" color="text.secondary">
+                        {x.district ?? "—"}
+                      </Typography>
 
                       {!x.about && (
                         <Typography variant="caption" color="text.secondary">
-                          Details unavailable (no ID)
+                          Details unavailable (no ID in list item)
                         </Typography>
                       )}
                     </Box>
@@ -275,14 +250,13 @@ export default function WaterTab({ location }) {
                 </Stack>
               </Grid>
 
-              {/* RIGHT: details */}
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                   Details
                 </Typography>
 
                 {!selected && (
-                  <EmptyBlock title="Select a bathing water" body="Click a result on the left to load details." />
+                  <EmptyBlock title="Select a bathing water" body="Click an item on the left to load details." />
                 )}
 
                 {selected && (
@@ -291,48 +265,62 @@ export default function WaterTab({ location }) {
                     sx={{
                       borderRadius: 2,
                       backdropFilter: "blur(10px)",
-                      backgroundColor: "rgba(255,255,255,0.72)",
+                      backgroundColor: "rgba(255,255,255,0.70)",
                     }}
                   >
                     <CardContent>
                       <Stack spacing={1}>
-                        <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.1 }}>
                           {selected.label}
                         </Typography>
 
                         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
                           <Chip size="small" label="EA Bathing Water" variant="outlined" />
                           {selected.km != null && <Chip size="small" label={`${selected.km.toFixed(1)} km away`} />}
-                          {selected.authority && <Chip size="small" label={selected.authority} variant="outlined" />}
                         </Stack>
+
+                        <Typography variant="caption" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+                          {selected.about || "—"}
+                        </Typography>
 
                         <Divider sx={{ my: 1 }} />
 
                         {!selected.about && (
-                          <EmptyBlock title="No detail URL" body="This entry has no linked ID to fetch details." />
+                          <EmptyBlock
+                            title="No detail URL"
+                            body="This entry has no about/_about/@id, so details can’t be fetched."
+                          />
                         )}
 
                         {selected.about && detailQuery.isLoading && <LoadingBlock lines={6} />}
-                        {selected.about && detailQuery.isError && <ErrorBlock error={detailQuery.error} />}
+                        {selected.about && detailQuery.isError && (
+                          <>
+                            <ErrorBlock error={detailQuery.error} />
+                            <Typography variant="caption" color="text.secondary">
+                              If you’re on Vite dev server, open <strong>/ea/doc/bathing-water.json</strong>.
+                              If it doesn’t load, your proxy isn’t active.
+                            </Typography>
+                          </>
+                        )}
 
                         {selected.about && detailQuery.isSuccess && detail && (
                           <>
                             <Typography variant="subtitle2">Summary</Typography>
 
                             <Box sx={{ p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-                              {detail.extra.length === 0 ? (
+                              {Object.keys(detail.extra).length === 0 ? (
                                 <Typography variant="body2" color="text.secondary">
-                                  No standard fields found for this resource.
+                                  No standard fields found in this response shape.
                                 </Typography>
                               ) : (
                                 <Stack spacing={0.75}>
-                                  {detail.extra.map(({ k, v }) => (
+                                  {Object.entries(detail.extra).map(([k, v]) => (
                                     <Stack key={k} direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
                                       <Typography variant="body2" sx={{ fontWeight: 800, minWidth: 140 }}>
                                         {k}:
                                       </Typography>
                                       <Typography variant="body2" color="text.secondary">
-                                        {v}
+                                        {prettyValue(v)}
                                       </Typography>
                                     </Stack>
                                   ))}
@@ -349,11 +337,25 @@ export default function WaterTab({ location }) {
                               >
                                 Open official page
                               </Button>
-                            </Stack>
 
-                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                              Tip: use the search box to find sites by council/authority name.
-                            </Typography>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => {
+                                  const blob = new Blob([JSON.stringify(detailQuery.data, null, 2)], {
+                                    type: "application/json",
+                                  });
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = url;
+                                  a.download = "bathing-water-detail.json";
+                                  a.click();
+                                  URL.revokeObjectURL(url);
+                                }}
+                              >
+                                Download evidence (JSON)
+                              </Button>
+                            </Stack>
                           </>
                         )}
                       </Stack>
