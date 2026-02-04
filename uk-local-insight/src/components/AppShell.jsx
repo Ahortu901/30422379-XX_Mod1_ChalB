@@ -1,4 +1,4 @@
-// src/components/AppShell.jsx
+
 import { useEffect, useMemo, useState } from "react";
 import {
   AppBar,
