@@ -56,7 +56,6 @@ export default function FloodTab({ location }) {
 
   const measures = measuresQuery.data || [];
 
-  // Auto-pick a measure when measures arrive
   useMemo(() => {
     if (!selectedStationId) return;
     if (!measures.length) return;
