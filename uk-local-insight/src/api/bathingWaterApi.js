@@ -1,4 +1,3 @@
-// src/api/bathingWaterApi.js  (FULL - robust list parsing + proxy paths)
 import { fetchJson } from "./fetchJson";
 
 // Always via proxy to avoid CORS (vite proxy + Netlify redirect)
