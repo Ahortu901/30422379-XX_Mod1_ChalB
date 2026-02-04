@@ -1,4 +1,4 @@
-// src/features/ons/OnsTab.jsx  (FULL - renders REAL values + metadata, not "JSON keys")
+
 import { useEffect, useMemo, useState } from "react";
 import {
   Box,
@@ -60,7 +60,7 @@ function renderMetadataEntries(o) {
 export default function OnsTab({ location }) {
   const [search, setSearch] = useState("");
   const [datasetId, setDatasetId] = useState("");
-  const [selectedOptions, setSelectedOptions] = useState({}); // { [dimensionName]: optionId }
+  const [selectedOptions, setSelectedOptions] = useState({}); 
 
   const datasetsQuery = useQuery({
     queryKey: ["ons-datasets"],
@@ -110,12 +110,12 @@ export default function OnsTab({ location }) {
 
   const dims = dimsQuery.data || [];
 
-  // Reset selections when dataset changes
+  
   useEffect(() => {
     setSelectedOptions({});
   }, [datasetId]);
 
-  // Options queries for every dimension (first 50 options each)
+  
   const optionsQueries = useQueries({
     queries: (dims || []).map((d) => ({
       queryKey: ["ons-options", versionParts?.datasetId, versionParts?.edition, versionParts?.version, d.name],
@@ -140,7 +140,7 @@ export default function OnsTab({ location }) {
     [optionsQueries]
   );
 
-  // Auto-select first option for each dimension to avoid missing-parameter errors
+  
   useEffect(() => {
     if (!dims.length) return;
     let changed = false;
@@ -156,7 +156,7 @@ export default function OnsTab({ location }) {
     });
 
     if (changed) setSelectedOptions(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  
   }, [dims, optionsQueries.map((q) => (q.data ? q.data.length : 0)).join("|")]);
 
   const allDimsSelected = useMemo(() => {
