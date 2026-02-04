@@ -11,7 +11,6 @@ export async function getDataset(datasetId) {
   return await fetchJson(`${BASE}/datasets/${encodeURIComponent(datasetId)}`);
 }
 
-// latest version usually accessible via dataset.links.latest_version.href
 export function getLatestVersionHref(datasetObj) {
   const href = datasetObj?.links?.latest_version?.href;
   if (!href) return null;
