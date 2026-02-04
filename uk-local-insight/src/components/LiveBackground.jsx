@@ -1,12 +1,6 @@
 import React from "react";
 import { Box } from "@mui/material";
 
-/**
- * Lightweight animated background:
- * - subtle gradient motion
- * - 3 blurred "blobs" drifting around
- * - respects reduced motion preference
- */
 export default function LiveBackground() {
   return (
     <Box
