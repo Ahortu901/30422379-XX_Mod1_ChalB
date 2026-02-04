@@ -33,7 +33,6 @@ function pickLabel(x) {
 }
 
 function getAboutUrl(x) {
-  // be VERY tolerant: the EA LD endpoints vary a lot
   return (
     x?._about ||
     x?.about ||
@@ -97,7 +96,6 @@ function prettyValue(v) {
 }
 
 function extractDetailSummary(detailJson) {
-  // Handle common EA response shapes without assuming too much
   const items = detailJson?.items ?? detailJson?.result?.items;
   const root = Array.isArray(items) ? items[0] : (detailJson?.result ?? detailJson);
 
@@ -141,7 +139,6 @@ export default function WaterTab({ location }) {
     queryFn: listBathingWaters,
   });
 
-  // Always safe mapping
   const listItems = useMemo(() => {
     const arr = Array.isArray(listQuery.data) ? listQuery.data : [];
     return arr.map(extractMetaFromListItem);
